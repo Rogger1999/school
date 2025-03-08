@@ -1,15 +1,12 @@
-###############################################################################
-# main.py
-###############################################################################
 import random
 import pandas as pd
 import plotly.express as px
 
 from flask import Flask
-# Ab Dash 2.9 kannst du callback_context direkt importieren:
-from dash import Dash, dcc, html, Input, Output, State, callback_context
+from dash import Dash, dcc, html, Input, Output, State, callback_context, no_update
+import dash_bootstrap_components as dbc
 
-from countries_data import countries_data  # <-- Hier liegen deine Länder-Daten
+from countries_data import countries_data  # external data file
 
 ###############################################################################
 # 1) DATAFRAME
@@ -17,7 +14,7 @@ from countries_data import countries_data  # <-- Hier liegen deine Länder-Daten
 df = pd.DataFrame(countries_data)
 
 ###############################################################################
-# 2) SCOPE-MAPPING
+# 2) PLOTLY SCOPE MAP
 ###############################################################################
 scope_map = {
     "Europa":              "europe",
@@ -30,91 +27,142 @@ scope_map = {
 }
 
 ###############################################################################
-# 3) FLASK + DASH (nur Flask, kein Uvicorn)
+# 3) FLASK + DASH (using Bootstrap theme)
 ###############################################################################
 flask_app = Flask(__name__)
-app = Dash(__name__, server=flask_app)  # Läuft standardmäßig unter http://127.0.0.1:8050/
+app = Dash(
+    __name__,
+    server=flask_app,
+    external_stylesheets=[dbc.themes.COSMO],  # pick any bootstrap theme
+)
 
 ###############################################################################
-# 4) LAYOUT: 3 "SCREENS"
+# 4) LAYOUT: 3 SCREENS + STORES
 ###############################################################################
-app.layout = html.Div([
-    dcc.Store(id="store-current-screen", data=1),         # 1=Willkommen, 2=Kontinent, 3=Quiz
-    dcc.Store(id="store-chosen-continent", data=None),    # gewählter Kontinent
-    dcc.Store(id="store-selected-country", data=None),     # aktuell gesuchtes Land (DE-Name)
+app.layout = dbc.Container(
+    [
+        # Hidden stores for app state
+        dcc.Store(id="store-current-screen", data=1),  # 1=Welcome, 2=Continent, 3=Quiz
+        dcc.Store(id="store-chosen-continent", data=None),
+        dcc.Store(id="store-selected-country", data=None),
+        dcc.Store(id="store-correct-count", data=0),
+        dcc.Store(id="store-wrong-count", data=0),
+        dcc.Store(id="store-done-countries", data=[]),
+        dcc.Store(id="store-remaining-countries", data=[]),
 
-    # --- SCREEN 1 (Willkommen) ---
-    html.Div(
-        id="screen-1",
-        children=[
-            html.H1("Mina & Valentina – Willkommen!", style={"textAlign": "center"}),
-            html.P("Kleines Länder-Ratespiel auf einer Blindkarte.", style={"textAlign": "center"}),
-            html.Button("Weiter", id="btn-to-screen-2", n_clicks=0,
-                        style={"display": "block", "margin": "20px auto"})
-        ],
-        style={
-            "border": "2px solid #ccc",
-            "padding": "20px",
-            "display": "block",
-            "maxWidth": "600px",
-            "margin": "20px auto",
-            "textAlign": "center"
-        }
-    ),
+        # Title / Navbar
+        dbc.Navbar(
+            dbc.Container([
+                dbc.NavbarBrand("Länder-Ratespiel (Blindkarte)", className="ms-2")
+            ]),
+            color="dark",
+            dark=True,
+            className="mb-4"
+        ),
 
-    # --- SCREEN 2 (Kontinent) ---
-    html.Div(
-        id="screen-2",
-        children=[
-            html.H2("Kontinent auswählen"),
-            dcc.Dropdown(
-                id="continent-dropdown",
-                options=[{"label": "Alle", "value": "Alle"}] + [
-                    {"label": c, "value": c} for c in sorted(df["continent"].unique())
-                ],
-                placeholder="Kontinent wählen...",
-                style={"width": "300px", "marginBottom": "20px"}
-            ),
-            html.Button("Spiel starten", id="btn-to-screen-3", n_clicks=0),
-        ],
-        style={
-            "border": "2px solid #ccc",
-            "padding": "20px",
-            "display": "none",
-            "maxWidth": "600px",
-            "margin": "20px auto"
-        }
-    ),
+        # SCREEN 1: WELCOME
+        dbc.Card(
+            [
+                dbc.CardHeader("Willkommen"),
+                dbc.CardBody(
+                    [
+                        html.H4("Mina & Valentina – Herzlich willkommen!", 
+                                className="card-title", style={"textAlign": "center"}),
+                        html.P("Dies ist ein kleines Länder-Ratespiel auf einer Blindkarte.",
+                               className="card-text", style={"textAlign": "center"}),
+                        dbc.Button(
+                            "Weiter", 
+                            id="btn-to-screen-2", 
+                            n_clicks=0, 
+                            color="primary", 
+                            className="d-block mx-auto mt-3"
+                        ),
+                    ]
+                )
+            ],
+            id="screen-1",
+            style={"display": "block", "maxWidth": "600px", "margin": "0 auto 2rem auto"}
+        ),
 
-    # --- SCREEN 3 (Quiz) ---
-    html.Div(
-        id="screen-3",
-        children=[
-            html.H2("Länder-Ratespiel (Blindkarte)"),
-            html.Div([
-                html.Label("Welches Land ist rot markiert?"),
-                dcc.Dropdown(id="country-guess-dropdown", style={"width": "300px"}),
-                html.Button("Tipp absenden", id="guess-button", style={"marginLeft": "10px"}),
-                html.Div(id="guess-result", style={"marginTop": "1em", "fontWeight": "bold"}),
-            ], style={"marginBottom": "20px"}),
+        # SCREEN 2: KONTINENT WÄHLEN
+        dbc.Card(
+            [
+                dbc.CardHeader("Kontinent auswählen"),
+                dbc.CardBody(
+                    [
+                        dcc.Dropdown(
+                            id="continent-dropdown",
+                            options=[{"label": "Alle", "value": "Alle"}] + [
+                                {"label": c, "value": c} 
+                                for c in sorted(df["continent"].unique())
+                            ],
+                            placeholder="Kontinent auswählen...",
+                            style={"width": "100%", "maxWidth": "300px", "marginBottom": "20px"}
+                        ),
+                        dbc.Button(
+                            "Spiel starten",
+                            id="btn-to-screen-3",
+                            n_clicks=0,
+                            color="success"
+                        ),
+                    ]
+                )
+            ],
+            id="screen-2",
+            style={"display": "none", "maxWidth": "600px", "margin": "0 auto 2rem auto"}
+        ),
 
-            dcc.Graph(id="blind-map"),
+        # SCREEN 3: QUIZ
+        dbc.Card(
+            [
+                dbc.CardHeader("Quiz"),
+                dbc.CardBody(
+                    [
+                        html.Div([
+                            html.Label("Welches Land ist rot markiert?", 
+                                       style={"fontWeight": "bold"}),
+                            dcc.Dropdown(
+                                id="country-guess-dropdown", 
+                                style={"width": "100%", "maxWidth": "300px"}
+                            ),
+                            dbc.Button(
+                                "Tipp absenden", 
+                                id="guess-button", 
+                                n_clicks=0, 
+                                color="primary", 
+                                className="mt-2"
+                            ),
+                            html.Div(
+                                id="guess-result", 
+                                style={"marginTop": "1em", "fontWeight": "bold", "color": "#333"}
+                            ),
+                        ], className="mb-3"),
 
-            html.Button("Zurück zur Kontinent-Auswahl", id="btn-back-to-screen-2", n_clicks=0,
-                        style={"marginTop": "20px"})
-        ],
-        style={
-            "border": "2px solid #ccc",
-            "padding": "20px",
-            "display": "none",
-            "maxWidth": "800px",
-            "margin": "20px auto"
-        }
-    ),
-])
+                        dcc.Graph(id="blind-map", style={"height": "600px"}),
+
+                        html.Div(id="score-display", className="mt-3 text-center"),
+                        html.Div(id="lists-display", className="mt-3 text-center"),
+
+                        dbc.Button(
+                            "Zurück zur Kontinent-Auswahl",
+                            id="btn-back-to-screen-2",
+                            n_clicks=0,
+                            color="secondary",
+                            className="mt-3"
+                        )
+                    ]
+                )
+            ],
+            id="screen-3",
+            style={"display": "none", "maxWidth": "900px", "margin": "0 auto 2rem auto"}
+        ),
+    ],
+    fluid=True,
+    className="pt-4"
+)
 
 ###############################################################################
-# 5) SCREENS-EIN-/AUSBLENDEN
+# 5) SCREEN VISIBILITY
 ###############################################################################
 @app.callback(
     Output("screen-1", "style"),
@@ -124,12 +172,9 @@ app.layout = html.Div([
 )
 def switch_screens(current_screen):
     style_hidden = {"display": "none"}
-    style_s1 = {"display": "block", "border": "2px solid #ccc", "padding": "20px",
-                "maxWidth": "600px", "margin": "20px auto", "textAlign": "center"}
-    style_s2 = {"display": "block", "border": "2px solid #ccc", "padding": "20px",
-                "maxWidth": "600px", "margin": "20px auto"}
-    style_s3 = {"display": "block", "border": "2px solid #ccc", "padding": "20px",
-                "maxWidth": "800px", "margin": "20px auto"}
+    style_s1 = {"display": "block", "maxWidth": "600px", "margin": "0 auto 2rem auto"}
+    style_s2 = {"display": "block", "maxWidth": "600px", "margin": "0 auto 2rem auto"}
+    style_s3 = {"display": "block", "maxWidth": "900px", "margin": "0 auto 2rem auto"}
 
     if current_screen == 1:
         return style_s1, style_hidden, style_hidden
@@ -139,7 +184,7 @@ def switch_screens(current_screen):
         return style_hidden, style_hidden, style_s3
 
 ###############################################################################
-# 6) SCREEN-WECHSEL
+# 6) SCREEN NAVIGATION
 ###############################################################################
 @app.callback(
     Output("store-current-screen", "data"),
@@ -150,9 +195,7 @@ def switch_screens(current_screen):
     prevent_initial_call=True
 )
 def navigate_screens(n1, n2, n3, current_screen):
-    # Hier verwenden wir callback_context aus dash >= 2.9:
     ctx = callback_context
-
     if not ctx.triggered:
         return current_screen
 
@@ -163,11 +206,10 @@ def navigate_screens(n1, n2, n3, current_screen):
         return 3
     elif trig_id == "btn-back-to-screen-2":
         return 2
-
     return current_screen
 
 ###############################################################################
-# 7) KONTINENT SPEICHERN
+# 7) SAVE CHOSEN CONTINENT
 ###############################################################################
 @app.callback(
     Output("store-chosen-continent", "data"),
@@ -180,34 +222,45 @@ def set_continent(cont_val, old_val):
     return cont_val
 
 ###############################################################################
-# 8) EINZIGER CALLBACK FÜR COUNTRY & RESULT & DROPDOWN
+# 8) SINGLE CALLBACK FOR INIT & GUESS
 ###############################################################################
 @app.callback(
     Output("country-guess-dropdown", "options"),
     Output("store-selected-country", "data"),
     Output("guess-result", "children"),
-    Input("store-current-screen", "data"),   # Falls wir auf Screen 3 wechseln
-    Input("guess-button", "n_clicks"),       # Falls Tipp-Button geklickt
+    Output("store-correct-count", "data"),
+    Output("store-wrong-count", "data"),
+    Output("store-done-countries", "data"),
+    Output("store-remaining-countries", "data"),
+    Output("score-display", "children"),
+    Output("lists-display", "children"),
+    Output("country-guess-dropdown", "value"),  # Clear selection after guess
+    Input("btn-to-screen-3", "n_clicks"),       # "Spiel starten"
+    Input("guess-button", "n_clicks"),          # "Tipp absenden"
     State("store-chosen-continent", "data"),
-    State("country-guess-dropdown", "value"),
     State("store-selected-country", "data"),
+    State("store-correct-count", "data"),
+    State("store-wrong-count", "data"),
+    State("store-done-countries", "data"),
+    State("store-remaining-countries", "data"),
+    State("country-guess-dropdown", "value"),
     prevent_initial_call=True
 )
-def manage_country_and_message(screen_val, guess_clicks,
-                               chosen_continent,
-                               user_guess_de,
-                               current_country_de):
+def quiz_logic(start_click, guess_click,
+               chosen_continent,
+               current_country_de,
+               correct_count,
+               wrong_count,
+               done_countries,
+               remaining_countries,
+               user_guess_de):
     ctx = callback_context
     if not ctx.triggered:
-        return [], None, ""
+        return no_update, no_update, "", correct_count, wrong_count, done_countries, remaining_countries, no_update, no_update, no_update
 
-    triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    trig_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
-    # Falls wir NICHT Screen 3 sind -> alles leer
-    if screen_val != 3:
-        return [], None, ""
-
-    # 1) Kontinent filtern
+    # Filter the DataFrame for the chosen continent
     if not chosen_continent or chosen_continent == "Alle":
         sub_df = df
     else:
@@ -215,36 +268,80 @@ def manage_country_and_message(screen_val, guess_clicks,
         if sub_df.empty:
             sub_df = df
 
-    # 2) Dropdown-Optionen
-    dropdown_opts = [
-        {"label": row["country_de"], "value": row["country_de"]}
-        for _, row in sub_df.iterrows()
-    ]
+    message = ""
 
-    # 3) Falls wir noch kein Land haben => zufälliges wählen
-    if not current_country_de:
-        new_country_de = random.choice(sub_df["country_de"].tolist())
-    else:
-        new_country_de = current_country_de
-
-    # 4) Standard-Message
-    msg = ""
-
-    # 5) Wenn guess-button geklickt -> Tipp prüfen
-    if triggered_id == "guess-button":
-        if not user_guess_de or not new_country_de:
-            msg = "Bitte zuerst ein Land auswählen!"
+    # 1) If "Spiel starten" clicked -> initialize quiz
+    if trig_id == "btn-to-screen-3":
+        correct_count = 0
+        wrong_count = 0
+        done_countries = []
+        remaining_countries = sub_df["country_de"].tolist()
+        if remaining_countries:
+            current_country_de = random.choice(remaining_countries)
         else:
-            if user_guess_de == new_country_de:
-                msg = "Richtig! Neues Land wurde geladen."
-                new_country_de = random.choice(sub_df["country_de"].tolist())
-            else:
-                msg = f"Falsch! Richtig war: {new_country_de}"
+            current_country_de = None
+        message = "Quiz initialisiert!"
 
-    return dropdown_opts, new_country_de, msg
+    # 2) If "Tipp absenden" -> check guess
+    elif trig_id == "guess-button":
+        if not current_country_de:
+            message = "Keine Länder mehr übrig oder Quiz nicht gestartet."
+        else:
+            if not user_guess_de:
+                message = "Bitte wähle ein Land im Dropdown!"
+            else:
+                if user_guess_de == current_country_de:
+                    message = "Richtig! Neues Land wurde geladen."
+                    correct_count += 1
+                else:
+                    message = f"Falsch! Richtig war: {current_country_de}"
+                    wrong_count += 1
+
+                # Mark the old country as done
+                if current_country_de not in done_countries:
+                    done_countries.append(current_country_de)
+                # Remove it from remaining
+                remaining_countries = [c for c in remaining_countries if c != current_country_de]
+                # Pick new
+                if remaining_countries:
+                    current_country_de = random.choice(remaining_countries)
+                else:
+                    message += " Quiz beendet!"
+                    current_country_de = None
+
+    # 3) Build new dropdown with only remaining countries
+    dropdown_options = [{"label": c, "value": c} for c in remaining_countries]
+
+    # 4) Score & lists
+    score_display = html.Div([
+        html.H5("Aktueller Punktestand"),
+        html.P(f"Korrekt: {correct_count}", style={"margin": 0}),
+        html.P(f"Falsch: {wrong_count}", style={"margin": 0})
+    ], className="border p-2 d-inline-block")
+
+    lists_display = html.Div([
+        html.H6("Verbleibende Länder:"),
+        html.P(", ".join(remaining_countries) if remaining_countries else "Keine mehr"),
+        html.H6("Bereits gemacht:"),
+        html.P(", ".join(done_countries) if done_countries else "Noch keine")
+    ], className="border p-2 mt-2")
+
+    # 5) Return all updated outputs, with the last item set to None to clear selection
+    return (
+        dropdown_options,
+        current_country_de,
+        message,
+        correct_count,
+        wrong_count,
+        done_countries,
+        remaining_countries,
+        score_display,
+        lists_display,
+        None  # Clear the dropdown selection
+    )
 
 ###############################################################################
-# 9) KARTE
+# 9) UPDATE MAP
 ###############################################################################
 @app.callback(
     Output("blind-map", "figure"),
@@ -253,12 +350,7 @@ def manage_country_and_message(screen_val, guess_clicks,
 )
 def update_map(chosen_country_de, chosen_continent):
     if not chosen_country_de:
-        fig_empty = px.scatter(
-            x=[0],
-            y=[0],
-            title="Bitte wähle einen Kontinent und starte das Spiel."
-        )
-        return fig_empty
+        return px.scatter(x=[0], y=[0], title="Bitte wähle einen Kontinent und starte das Spiel.")
 
     cont = chosen_continent if chosen_continent else "Alle"
     scope_val = scope_map.get(cont, "world")
@@ -283,18 +375,15 @@ def update_map(chosen_country_de, chosen_continent):
         locations="country_en",
         locationmode="country names",
         color="color",
-        color_discrete_map={
-            "selected": "red",
-            "non-selected": "lightgrey"
-        },
-        scope=scope_val
+        color_discrete_map={"selected": "red", "non-selected": "lightgrey"},
+        scope=scope_val,
+        height=600
     )
     fig.update_layout(title=f"Karte ({cont})", showlegend=False)
     return fig
 
 ###############################################################################
-# 10) START (Flask-Server)
+# 10) RUN SERVER
 ###############################################################################
 if __name__ == "__main__":
-    # Startet auf http://127.0.0.1:8050/
-    app.run_server(debug=True, port=8080)
+    app.run_server(debug=True, host="0.0.0.0", port=8080)
