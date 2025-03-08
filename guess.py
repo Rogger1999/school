@@ -416,4 +416,20 @@ def update_map(chosen_country_de, chosen_continent):
         fig.add_trace(go.Scattergeo(
             lon=micro_data["lon"],
             lat=micro_data["lat"],
-            mode
+            mode="markers",
+            marker=dict(size=micro_data["size"], color=micro_data["color"]),
+            showlegend=False
+        ))
+
+    # Pokud je vybraný stát v micro_zooms, přiblížíme pohled
+    if chosen_country_de in micro_zooms:
+        lat, lon, scale = micro_zooms[chosen_country_de]
+        fig.update_geos(center=dict(lat=lat, lon=lon), projection_scale=scale)
+
+    return fig
+
+###############################################################################
+# 11) SPUŠTĚNÍ FLASK SERVERU
+###############################################################################
+if __name__ == "__main__":
+    app.run_server(debug=True, host="0.0.0.0", port=8080)
