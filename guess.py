@@ -16,7 +16,7 @@ from countries_data import countries_data  # Externí soubor s daty zemí
 df = pd.DataFrame(countries_data)
 
 ###############################################################################
-# 2) MAPOVÁNÍ KONTINENTŮ NA "SCOPE"
+# 2) MAPOVÁNÍ KONTINENTŮ NA PLOTLY SCOPE
 ###############################################################################
 scope_map = {
     "Europa":              "europe",
@@ -29,9 +29,7 @@ scope_map = {
 }
 
 ###############################################################################
-# 3) KOORDINÁTY PRO MALÉ STÁTY (MICRO-COUNTRIES) + ZOOM
-#    - micro_coords: pro vykreslení teček (pokud je potřeba)
-#    - micro_zooms: definice středu a "scale" (zoom) pro malé státy
+# 3) KOORDINÁTY A ZOOM PRO MALÉ STÁTY (MICRO-COUNTRIES)
 ###############################################################################
 micro_coords = {
     "Andorra":       {"lat": 42.5063, "lon": 1.5218},
@@ -43,7 +41,6 @@ micro_coords = {
     "Liechtenstein": {"lat": 47.14,   "lon": 9.55},
 }
 
-# Pokud je země v micro_zooms, mapu automaticky přiblížíme na daný lat,lon a scale
 micro_zooms = {
     "Andorra":       (42.5063, 1.5218, 8),
     "Malta":         (35.9375, 14.3754, 7),
@@ -55,16 +52,33 @@ micro_zooms = {
 }
 
 ###############################################################################
-# 4) FLASK + DASH (BOOTSTRAP)
+# 4) DEFAULT COORDINATES PRO VĚTŠÍ STÁTY (použijeme anglické názvy)
+###############################################################################
+default_coords = {
+    "Germany": {"lat": 51.1657, "lon": 10.4515},
+    "France": {"lat": 46.6034, "lon": 1.8883},
+    "Spain": {"lat": 40.4637, "lon": -3.7492},
+    "Italy": {"lat": 41.8719, "lon": 12.5674},
+    "China": {"lat": 35.8617, "lon": 104.1954},
+    "Russia": {"lat": 61.5240, "lon": 105.3188},
+    "United States": {"lat": 37.0902, "lon": -95.7129},
+    "Canada": {"lat": 56.1304, "lon": -106.3468},
+    "Brazil": {"lat": -14.2350, "lon": -51.9253},
+    "Argentina": {"lat": -38.4161, "lon": -63.6167},
+    "Egypt": {"lat": 26.8206, "lon": 30.8025},
+    "Morocco": {"lat": 31.7917, "lon": -7.0926},
+}
+
+###############################################################################
+# 5) FLASK + DASH (s Bootstrap tématem)
 ###############################################################################
 flask_app = Flask(__name__)
 app = Dash(__name__, server=flask_app, external_stylesheets=[dbc.themes.COSMO])
 
 ###############################################################################
-# 5) LAYOUT: 3 OBRAZOVKY (SCREENS) + STAVY (STORES)
+# 6) LAYOUT: 3 OBRAZOVKY A STORES PRO STAV A ČAS
 ###############################################################################
 app.layout = dbc.Container([
-    # Ukládání stavů
     dcc.Store(id="store-current-screen", data=1),         # 1=Welcome, 2=Continent, 3=Quiz
     dcc.Store(id="store-chosen-continent", data=None),
     dcc.Store(id="store-selected-country", data=None),
@@ -72,9 +86,8 @@ app.layout = dbc.Container([
     dcc.Store(id="store-wrong-count", data=0),
     dcc.Store(id="store-done-countries", data=[]),
     dcc.Store(id="store-remaining-countries", data=[]),
-    dcc.Store(id="store-start-time", data=None),          # pro měření času
+    dcc.Store(id="store-start-time", data=None),
 
-    # Horní lišta
     dbc.Navbar(
         dbc.Container([
             dbc.NavbarBrand("Länder-Ratespiel (Blindkarte)", className="ms-2")
@@ -82,26 +95,21 @@ app.layout = dbc.Container([
         color="dark", dark=True, className="mb-4"
     ),
 
-    # SCREEN 1: Welcome
+    # SCREEN 1: Vítejte
     dbc.Card(
         [
             dbc.CardHeader("Willkommen"),
             dbc.CardBody([
-                html.H4("Mina & Valentina – Herzlich willkommen!", 
-                        className="card-title", 
-                        style={"textAlign": "center"}),
-                html.P("Kleines Länder-Ratespiel auf einer Blindkarte.", 
-                       className="card-text", 
-                       style={"textAlign": "center"}),
-                dbc.Button("Weiter", id="btn-to-screen-2", n_clicks=0, color="primary",
-                           className="d-block mx-auto mt-3")
+                html.H4("Mina & Valentina – Herzlich willkommen!", className="card-title", style={"textAlign": "center"}),
+                html.P("Kleines Länder-Ratespiel na Blindkarte.", className="card-text", style={"textAlign": "center"}),
+                dbc.Button("Weiter", id="btn-to-screen-2", n_clicks=0, color="primary", className="d-block mx-auto mt-3")
             ])
         ],
         id="screen-1",
         style={"maxWidth": "600px", "margin": "0 auto 2rem auto"}
     ),
 
-    # SCREEN 2: Kontinent
+    # SCREEN 2: Kontinent výběr
     dbc.Card(
         [
             dbc.CardHeader("Kontinent auswählen"),
@@ -109,8 +117,7 @@ app.layout = dbc.Container([
                 dcc.Dropdown(
                     id="continent-dropdown",
                     options=[{"label": "Alle", "value": "Alle"}] + [
-                        {"label": c, "value": c} 
-                        for c in sorted(df["continent"].unique())
+                        {"label": c, "value": c} for c in sorted(df["continent"].unique())
                     ],
                     placeholder="Kontinent auswählen...",
                     style={"width": "100%", "maxWidth": "300px", "marginBottom": "20px"}
@@ -139,8 +146,7 @@ app.layout = dbc.Container([
                 html.Div(id="score-display", className="mt-3 text-center"),
                 html.Div(id="lists-display", className="mt-3 text-center"),
 
-                dbc.Button("Zurück zur Kontinent-Auswahl", id="btn-back-to-screen-2",
-                           n_clicks=0, color="secondary", className="mt-3")
+                dbc.Button("Zurück zur Kontinent-Auswahl", id="btn-back-to-screen-2", n_clicks=0, color="secondary", className="mt-3")
             ])
         ],
         id="screen-3",
@@ -149,7 +155,7 @@ app.layout = dbc.Container([
 ], fluid=True, className="pt-4")
 
 ###############################################################################
-# 6) CALLBACK: ZOBRAZENÍ OBRAZOVEK
+# 7) CALLBACK: ZOBRAZENÍ OBRAZOVEK
 ###############################################################################
 @app.callback(
     Output("screen-1", "style"),
@@ -162,7 +168,6 @@ def switch_screens(current_screen):
     style_1 = {"display": "block", "maxWidth": "600px", "margin": "0 auto 2rem auto", "textAlign": "center"}
     style_2 = {"display": "block", "maxWidth": "600px", "margin": "0 auto 2rem auto"}
     style_3 = {"display": "block", "maxWidth": "900px", "margin": "0 auto 2rem auto"}
-
     if current_screen == 1:
         return style_1, style_hidden, style_hidden
     elif current_screen == 2:
@@ -171,7 +176,7 @@ def switch_screens(current_screen):
         return style_hidden, style_hidden, style_3
 
 ###############################################################################
-# 7) CALLBACK: NAVIGACE MEZI OBRAZOVKAMI
+# 8) CALLBACK: NAVIGACE MEZI OBRAZOVKAMI
 ###############################################################################
 @app.callback(
     Output("store-current-screen", "data"),
@@ -185,7 +190,6 @@ def navigate_screens(n1, n2, n3, current_screen):
     ctx = callback_context
     if not ctx.triggered:
         return current_screen
-
     trig_id = ctx.triggered[0]["prop_id"].split(".")[0]
     if trig_id == "btn-to-screen-2":
         return 2
@@ -196,7 +200,7 @@ def navigate_screens(n1, n2, n3, current_screen):
     return current_screen
 
 ###############################################################################
-# 8) CALLBACK: ULOŽENÍ VYBRANÉHO KONTINENTU
+# 9) CALLBACK: ULOŽENÍ VYBRANÉHO KONTINENTU
 ###############################################################################
 @app.callback(
     Output("store-chosen-continent", "data"),
@@ -209,7 +213,7 @@ def set_continent(cont_val, old_val):
     return cont_val
 
 ###############################################################################
-# 9) Hlavní CALLBACK pro LOGIKU QUIZU (start + tipování)
+# 10) CALLBACK: LOGIKA QUIZU (inicializace + tipování)
 ###############################################################################
 @app.callback(
     Output("country-guess-dropdown", "options"),
@@ -221,8 +225,8 @@ def set_continent(cont_val, old_val):
     Output("store-remaining-countries", "data"),
     Output("score-display", "children"),
     Output("lists-display", "children"),
-    Output("country-guess-dropdown", "value"),  # vyčištění dropdownu
-    Output("store-start-time", "data"),         # ukládání startu pro měření času
+    Output("country-guess-dropdown", "value"),   # vyčištění výběru
+    Output("store-start-time", "data"),
     Input("btn-to-screen-3", "n_clicks"),       # "Spiel starten"
     Input("guess-button", "n_clicks"),          # "Tipp absenden"
     State("store-chosen-continent", "data"),
@@ -246,14 +250,12 @@ def quiz_logic(start_click, guess_click,
                start_time):
     import time
     now = time.time()
-
     ctx = callback_context
     if not ctx.triggered:
         return no_update, no_update, "", correct_count, wrong_count, done_countries, remaining_countries, no_update, no_update, no_update, no_update
-
     trig_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
-    # Filtr dle kontinentu
+    # Filtrace DF dle vybraného kontinentu
     if not chosen_continent or chosen_continent == "Alle":
         sub_df = df
     else:
@@ -263,24 +265,23 @@ def quiz_logic(start_click, guess_click,
 
     message = ""
 
-    # Pokud kliknuto na "Spiel starten" -> inicializace
+    # Pokud je kliknuto na "Spiel starten" -> inicializace
     if trig_id == "btn-to-screen-3":
         correct_count = 0
         wrong_count = 0
         done_countries = []
         remaining_countries = sub_df["country_de"].tolist()
-        start_time = now  # uložení času startu
-
+        start_time = now
         if remaining_countries:
             current_country_de = random.choice(remaining_countries)
         else:
             current_country_de = None
         message = "Quiz initialisiert!"
 
-    # Pokud "Tipp absenden" -> vyhodnocení
+    # Pokud je kliknuto na "Tipp absenden" -> vyhodnocení
     elif trig_id == "guess-button":
         if not current_country_de:
-            message = "Keine Länder mehr übrig oder Quiz nicht gestartet."
+            message = "Keine Länder mehr übrig nebo Quiz nicht gestartet."
         else:
             if not user_guess_de:
                 message = "Bitte wähle ein Land aus dem Dropdown!"
@@ -291,7 +292,6 @@ def quiz_logic(start_click, guess_click,
                 else:
                     message = f"Falsch! Richtig war: {current_country_de}"
                     wrong_count += 1
-
                 if current_country_de not in done_countries:
                     done_countries.append(current_country_de)
                 remaining_countries = [c for c in remaining_countries if c != current_country_de]
@@ -301,24 +301,16 @@ def quiz_logic(start_click, guess_click,
                     message += " Quiz beendet!"
                     current_country_de = None
 
-    # Dropdown (zbývající země)
+    # Dropdown: pouze zbývající země (hotové země se neukazují)
     dropdown_options = [{"label": c, "value": c} for c in remaining_countries]
 
-    # Výpočet uplynulého času
+    # Výpočet času
     if start_time is None:
         elapsed = 0
     else:
         elapsed = now - start_time
+    elapsed_str = f"{int(elapsed)} s" if elapsed < 120 else f"{int(elapsed // 60)} min {int(elapsed % 60)} s"
 
-    # Formát času
-    if elapsed < 120:
-        elapsed_str = f"{int(elapsed)} s"
-    else:
-        m = int(elapsed // 60)
-        s = int(elapsed % 60)
-        elapsed_str = f"{m} min {s} s"
-
-    # Zobrazení skóre a času
     score_display = dbc.Card(
         dbc.CardBody([
             html.H5("Aktueller Punktestand", className="card-title"),
@@ -329,7 +321,6 @@ def quiz_logic(start_click, guess_click,
         className="border p-2 d-inline-block"
     )
 
-    # Seznam zbývajících a hotových zemí
     lists_display = dbc.Card(
         dbc.CardBody([
             html.H6("Verbleibende Länder:"),
@@ -350,12 +341,12 @@ def quiz_logic(start_click, guess_click,
         remaining_countries,
         score_display,
         lists_display,
-        None,       # vyčištění dropdownu
-        start_time  # start_time zůstane (nebo se nově nastaví, pokud to byl start)
+        None,       # vyčištění výběru
+        start_time
     )
 
 ###############################################################################
-# 10) CALLBACK PRO VYKRESLENÍ MAPY
+# 10) CALLBACK: MAPA
 ###############################################################################
 @app.callback(
     Output("blind-map", "figure"),
@@ -372,11 +363,8 @@ def update_map(chosen_country_de, chosen_continent):
     row = df.loc[df["country_de"] == chosen_country_de]
     selected_en = row["country_en"].values[0] if not row.empty else None
 
-    # Příprava barev pro vybranou zemi
     df_map = df.copy()
-    df_map["color"] = df_map["country_en"].apply(
-        lambda x: "selected" if x == selected_en else "non-selected"
-    )
+    df_map["color"] = df_map["country_en"].apply(lambda x: "selected" if x == selected_en else "non-selected")
 
     if cont == "Alle":
         sub_df_map = df_map
@@ -385,7 +373,6 @@ def update_map(chosen_country_de, chosen_continent):
         if sub_df_map.empty:
             sub_df_map = df_map
 
-    # Základní choropleth
     fig = px.choropleth(
         sub_df_map,
         locations="country_en",
@@ -397,8 +384,7 @@ def update_map(chosen_country_de, chosen_continent):
     )
     fig.update_layout(title=f"Karte ({cont})", showlegend=False)
 
-    # (Nepovinné) Přidání teček pro mikro státy
-    #  - Bez popisků
+    # Přidání markerů pro mikro-státy (bez popisků)
     micro_data = {"country": [], "lat": [], "lon": [], "color": [], "size": []}
     for micro, coords in micro_coords.items():
         if micro in df["country_de"].values:
@@ -421,15 +407,21 @@ def update_map(chosen_country_de, chosen_continent):
             showlegend=False
         ))
 
-    # Pokud je vybraný stát v micro_zooms, přiblížíme pohled
+    # Vždy přiblížíme mapu na právě vybranou zemi.
+    # Pokud je vybraná země v micro_zooms, použijeme její specifický zoom.
+    # Jinak se pokusíme získat souřadnice z default_coords (na základě anglického názvu)
     if chosen_country_de in micro_zooms:
         lat, lon, scale = micro_zooms[chosen_country_de]
         fig.update_geos(center=dict(lat=lat, lon=lon), projection_scale=scale)
-
+    elif selected_en and selected_en in default_coords:
+        coords = default_coords[selected_en]
+        fig.update_geos(center=dict(lat=coords["lat"], lon=coords["lon"]), projection_scale=10)
+    else:
+        fig.update_geos(fitbounds="locations", projection_scale=10)
     return fig
 
 ###############################################################################
-# 11) SPUŠTĚNÍ FLASK SERVERU
+# 11) SPUŠTĚNÍ FLASK-SERVERU
 ###############################################################################
 if __name__ == "__main__":
     app.run_server(debug=True, host="0.0.0.0", port=8080)
